@@ -1,474 +1,132 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mi App de Consultas</title>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body>
-    <div id="root"></div>
+import streamlit as st
+import pandas as pd
+import io
 
-    <script type="text/babel">
-        // --- AQUÍ PEGA TU CÓDIGO DE REACT ---
-      <script type="text/babel">
-import React, { useState, useEffect } from 'react';
-import { Upload, Search, FileText, Database, Tag, X, AlertCircle, Settings, ChevronDown, ChevronUp, Save, Trash2, Check, ArrowDownWideNarrow, Calculator, DollarSign, TrendingUp } from 'lucide-react';
+# Configuración de la página
+st.set_page_config(page_title="Buscador de Experiencias", layout="wide")
 
-// Clave para guardar en el navegador
-const STORAGE_KEY = 'suforma_experiencias_db_v1';
-const FILE_NAME_KEY = 'suforma_filename_v1';
-
-// Datos de ejemplo (se usan si no hay nada guardado ni cargado)
-const SAMPLE_DATA_CSV = `ID_Experiencia;Consecutivo;Celebrado_Por;Contratista;Contratante;Objeto;Valor_SMMLV; Valor del contrato a COP en 2024 ;Porcentaje_Participacion;Codigos_UNSPSC
-1;1;1 - EL PROPONENTE;SUFORMA S.A.S.;ALCALDIA MUNICIPAL DE CHIA;IMPRESOS;111,31; 144.703.000 ;1;11101500, 11101600, 11101700, 11101800, 11101900, 11111600, 14111500, 14111600, 14111700, 14111800, 14121500, 14121900, 24111500, 24112500, 31101700, 31121900, 31401700, 45101700, 55101500, 55111500, 55121700, 60141000, 60141100, 73151900, 82101500, 82101600, 82101700`;
-
-const App = () => {
-  const [data, setData] = useState([]);
-  const [filteredData, setFilteredData] = useState([]);
-  const [fileName, setFileName] = useState("Datos de muestra");
-  const [isDataPersisted, setIsDataPersisted] = useState(false);
-  
-  const [showSourceSettings, setShowSourceSettings] = useState(false);
-  
-  const [searchCodes, setSearchCodes] = useState("");
-  const [searchObject, setSearchObject] = useState("");
-  const [error, setError] = useState(null);
-
-  // Estados para totales
-  const [totals, setTotals] = useState({ count: 0, smmlv: 0, cop: 0 });
-
-  // Función para parsear CSV
-  const parseCSV = (text) => {
-    try {
-      const lines = text.split('\n').filter(line => line.trim() !== '');
-      if (lines.length < 2) return [];
-
-      const headers = lines[0].split(';').map(h => h.trim());
-      
-      const idxObjeto = headers.findIndex(h => h.toLowerCase().includes('objeto'));
-      const idxCodigos = headers.findIndex(h => h.toLowerCase().includes('codigos') || h.toLowerCase().includes('unspsc'));
-      const idxContratante = headers.findIndex(h => h.toLowerCase().includes('contratante'));
-      const idxValor = headers.findIndex(h => h.toLowerCase().includes('valor') && h.toLowerCase().includes('cop'));
-      const idxSmmlv = headers.findIndex(h => h.toLowerCase().includes('smmlv'));
-      const idxConsecutivo = headers.findIndex(h => h.toLowerCase().trim() === 'consecutivo' || h.toLowerCase().includes('consecutivo'));
-      const idxId = headers.findIndex(h => h.toLowerCase().includes('id') && !h.toLowerCase().includes('consecutivo'));
-
-      return lines.slice(1).map((line, index) => {
-        const cols = line.split(';');
-        if (cols.length < headers.length - 2) return null;
-
-        // Parseo de SMMLV
-        const smmlvRaw = cols[idxSmmlv] || '0';
-        const smmlvValue = parseFloat(smmlvRaw.replace(/\./g, '').replace(',', '.')) || 0;
-
-        // Parseo de COP (Valor 2024)
-        const valorRaw = cols[idxValor] || '0';
-        // Eliminar puntos de miles y espacios para convertir a numero entero
-        const valorCOPValue = parseInt(valorRaw.replace(/\./g, '').trim()) || 0;
-
-        return {
-          id: cols[idxId !== -1 ? idxId : 0] || index + 1,
-          consecutivo: cols[idxConsecutivo] || '-',
-          contratante: cols[idxContratante] || 'Desconocido',
-          objeto: cols[idxObjeto] || '',
-          valor: valorRaw,
-          valorCOPValue: valorCOPValue, // Guardamos el numérico para sumar
-          smmlv: smmlvRaw,
-          smmlvValue: smmlvValue, // Guardamos el numérico para ordenar y sumar
-          codigos: cols[idxCodigos] || '',
-          raw: cols
-        };
-      }).filter(item => item !== null);
-    } catch (e) {
-      console.error("Error parseando CSV", e);
-      setError("Error al leer el archivo. Asegúrate de que sea un CSV delimitado por punto y coma (;).");
-      return [];
+# Estilo personalizado para las tarjetas (Simulando el diseño de React)
+st.markdown("""
+    <style>
+    .result-card {
+        background-color: white;
+        padding: 20px;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        margin-bottom: 15px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
-  };
-
-  // Cargar datos iniciales (Local Storage o Muestra)
-  useEffect(() => {
-    const savedData = localStorage.getItem(STORAGE_KEY);
-    const savedName = localStorage.getItem(FILE_NAME_KEY);
-
-    if (savedData) {
-      try {
-        const parsedData = JSON.parse(savedData);
-        setData(parsedData);
-        setFileName(savedName || "Datos Guardados");
-        setIsDataPersisted(true);
-      } catch (e) {
-        console.error("Error leyendo cache", e);
-        loadSampleData();
-      }
-    } else {
-      loadSampleData();
+    .contratante-header {
+        color: #1e40af;
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 0.9rem;
     }
-  }, []);
-
-  const loadSampleData = () => {
-    const parsed = parseCSV(SAMPLE_DATA_CSV);
-    setData(parsed);
-    setFileName("Datos de muestra (Cargar CSV completo)");
-    setIsDataPersisted(false);
-  };
-
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    setFileName(file.name);
-    setError(null);
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target.result;
-      const parsed = parseCSV(text);
-      if (parsed.length === 0) {
-        setError("No se encontraron datos válidos en el archivo.");
-      } else {
-        setData(parsed);
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
-          localStorage.setItem(FILE_NAME_KEY, file.name);
-          setIsDataPersisted(true);
-        } catch (storageError) {
-          console.error("Error guardando en localstorage", storageError);
-          setError("El archivo se cargó, pero es demasiado grande para guardarse automáticamente.");
-        }
-        setShowSourceSettings(false);
-      }
-    };
-    reader.onerror = () => setError("Error al leer el archivo.");
-    reader.readAsText(file, 'ISO-8859-1');
-  };
-
-  const clearSavedData = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(FILE_NAME_KEY);
-    loadSampleData();
-    setIsDataPersisted(false);
-    setShowSourceSettings(false);
-  };
-
-  // Lógica de Filtrado, Ordenamiento y Cálculo de Totales
-  useEffect(() => {
-    let result = [...data];
-
-    if (searchObject.trim()) {
-      const term = searchObject.toLowerCase();
-      result = result.filter(item => 
-        item.objeto && item.objeto.toLowerCase().includes(term)
-      );
+    .badge {
+        background-color: #f1f5f9;
+        color: #475569;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        margin-right: 5px;
     }
-
-    if (searchCodes.trim()) {
-      const requiredCodes = searchCodes.split(',')
-        .map(c => c.trim())
-        .filter(c => c.length > 0);
-
-      if (requiredCodes.length > 0) {
-        result = result.filter(item => {
-          if (!item.codigos) return false;
-          return requiredCodes.every(reqCode => item.codigos.includes(reqCode));
-        });
-      }
+    .badge-match {
+        background-color: #e0e7ff;
+        color: #4338ca;
+        font-weight: bold;
+        border: 1px solid #c7d2fe;
     }
+    </style>
+""", unsafe_allow_html=True)
 
-    // Ordenar de Mayor a Menor por SMMLV
-    result.sort((a, b) => b.smmlvValue - a.smmlvValue);
+# Datos de muestra iniciales
+SAMPLE_DATA = """ID_Experiencia;Consecutivo;Celebrado_Por;Contratista;Contratante;Objeto;Valor_SMMLV;Valor_COP;Porcentaje_Participacion;Codigos_UNSPSC
+1;1;1 - EL PROPONENTE;SUFORMA S.A.S.;ALCALDIA MUNICIPAL DE CHIA;IMPRESOS;111.31;144703000;1;11101500, 11101600, 11101700, 11101800, 11101900, 11111600, 14111500"""
 
-    // Calcular Totales
-    const totalSMMLV = result.reduce((acc, item) => acc + item.smmlvValue, 0);
-    const totalCOP = result.reduce((acc, item) => acc + item.valorCOPValue, 0);
+def format_currency(val):
+    return f"$ {val:,.0f}".replace(",", ".")
 
-    setTotals({
-      count: result.length,
-      smmlv: totalSMMLV,
-      cop: totalCOP
-    });
+# --- LÓGICA DE CARGA DE DATOS ---
+st.sidebar.title("⚙️ Configuración")
+uploaded_file = st.sidebar.file_uploader("Cargar archivo CSV (Punto y coma)", type=["csv"])
 
-    setFilteredData(result);
-  }, [data, searchCodes, searchObject]);
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file, sep=";", encoding="latin1")
+    st.sidebar.success("¡Archivo cargado!")
+else:
+    df = pd.read_csv(io.StringIO(SAMPLE_DATA), sep=";")
+    st.sidebar.info("Usando datos de muestra")
 
-  // Formateador de moneda
-  const formatMoney = (val) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(val);
-  const formatDecimal = (val) => new Intl.NumberFormat('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
+# Limpieza básica de datos numéricos
+for col in ['Valor_SMMLV', 'Valor_COP']:
+    if col in df.columns:
+        if df[col].dtype == object:
+            df[col] = df[col].str.replace('.', '').str.replace(',', '.').astype(float)
 
-  return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 p-4 md:p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
+# --- PANEL DE BÚSQUEDA ---
+st.title("🔍 Buscador de Experiencias")
+
+col1, col2 = st.columns(2)
+with col1:
+    search_codes = st.text_input("🏷️ Códigos UNSPSC (separa por comas)", placeholder="Ej: 11101500, 14111500")
+with col2:
+    search_object = st.text_input("📄 Objeto del Contrato", placeholder="Buscar descripción...")
+
+# --- FILTRADO ---
+filtered_df = df.copy()
+
+if search_object:
+    filtered_df = filtered_df[filtered_df['Objeto'].str.contains(search_object, case=False, na=False)]
+
+if search_codes:
+    codes_to_find = [c.strip() for c in search_codes.split(',') if c.strip()]
+    def match_codes(row_codes):
+        if pd.isna(row_codes): return False
+        return all(str(c) in str(row_codes) for c in codes_to_find)
+    filtered_df = filtered_df[filtered_df['Codigos_UNSPSC'].apply(match_codes)]
+
+# Ordenar por SMMLV
+filtered_df = filtered_df.sort_values(by='Valor_SMMLV', ascending=False)
+
+# --- DASHBOARD ---
+m1, m2, m3 = st.columns(3)
+m1.metric("Experiencias", len(filtered_df))
+m2.metric("Total SMMLV", f"{filtered_df['Valor_SMMLV'].sum():,.2f}")
+m3.metric("Presupuesto Total", format_currency(filtered_df['Valor_COP'].sum()))
+
+st.divider()
+
+# --- LISTA DE RESULTADOS ---
+if filtered_df.empty:
+    st.warning("No se encontraron resultados con esos filtros.")
+else:
+    for _, item in filtered_df.iterrows():
+        # Crear la tarjeta visual con HTML
+        codes_list = str(item['Codigos_UNSPSC']).split(',')
+        search_list = [c.strip() for c in search_codes.split(',')] if search_codes else []
         
-        {/* Header */}
-        <header className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-600 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-              <Database className="text-blue-600" />
-              Buscador de Experiencias
-            </h1>
-            <div className="flex items-center gap-2 mt-1">
-              {isDataPersisted && (
-                <span className="flex items-center gap-1 text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium border border-green-200">
-                  <Save size={10} /> Datos Guardados
-                </span>
-              )}
-            </div>
-          </div>
-          
-          <button 
-            onClick={() => setShowSourceSettings(!showSourceSettings)}
-            className={`flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg transition-all border ${
-              showSourceSettings 
-                ? 'bg-blue-50 text-blue-700 border-blue-200' 
-                : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300 hover:text-blue-600'
-            }`}
-          >
-            <Settings size={16} />
-            Configuración
-            {showSourceSettings ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
-        </header>
+        badges_html = ""
+        for c in codes_list:
+            cls = "badge-match" if c.strip() in search_list else ""
+            badges_html += f'<span class="badge {cls}">{c.strip()}</span>'
 
-        {/* Configuración (Hidden by default) */}
-        {showSourceSettings && (
-          <div className="bg-white rounded-xl shadow-md p-6 animate-in fade-in slide-in-from-top-2 border border-slate-100">
-            <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
-              <Settings size={16} /> Gestión de Datos
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-500 uppercase">Cargar / Actualizar Archivo</label>
-                <div className="relative group w-full">
-                  <input type="file" accept=".csv" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-                  <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 flex items-center justify-center gap-3 text-slate-500 group-hover:border-blue-500 group-hover:text-blue-600 transition-colors bg-slate-50 h-24 cursor-pointer hover:bg-blue-50">
-                    <div className="text-center">
-                      <Upload size={20} className="mx-auto mb-1" />
-                      <span className="text-sm font-medium block truncate max-w-[200px]">{fileName}</span>
+        st.markdown(f"""
+            <div class="result-card">
+                <div class="contratante-header">#{item['Consecutivo']} | {item['Contratante']}</div>
+                <div style="margin: 10px 0; font-size: 1rem; color: #1e293b;">{item['Objeto']}</div>
+                <div style="display: flex; gap: 20px; background: #f8fafc; padding: 10px; border-radius: 8px;">
+                    <div>
+                        <small style="color: #64748b; display: block;">VALOR (COP)</small>
+                        <strong>{format_currency(item['Valor_COP'])}</strong>
                     </div>
-                  </div>
+                    <div style="border-left: 2px solid #e2e8f0; padding-left: 20px;">
+                        <small style="color: #059669; display: block;">VALOR (SMMLV)</small>
+                        <strong style="color: #059669; font-size: 1.2rem;">{item['Valor_SMMLV']:,.2f}</strong>
+                    </div>
                 </div>
-              </div>
-              <div className="space-y-2 flex flex-col justify-between">
-                {isDataPersisted && (
-                  <button onClick={clearSavedData} className="flex items-center justify-center gap-2 text-red-600 hover:bg-red-50 border border-red-200 hover:border-red-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors w-full">
-                    <Trash2 size={16} /> Borrar datos guardados
-                  </button>
-                )}
-              </div>
+                <div style="margin-top: 10px;">
+                    <small style="color: #94a3b8; display: block; margin-bottom: 5px;">CÓDIGOS UNSPSC</small>
+                    {badges_html}
+                </div>
             </div>
-            {error && <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg flex items-center gap-2 text-sm"><AlertCircle size={16} />{error}</div>}
-          </div>
-        )}
-
-        {/* Panel de Búsqueda */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
-              <Tag size={16} className="text-indigo-500" />
-              Códigos UNSPSC
-            </label>
-            <div className="relative">
-              <input 
-                type="text" 
-                value={searchCodes}
-                onChange={(e) => setSearchCodes(e.target.value)}
-                placeholder="Ej: 11121600, 14111500"
-                className="w-full pl-4 pr-10 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-              />
-              {searchCodes && (
-                <button onClick={() => setSearchCodes("")} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600">
-                  <X size={16} />
-                </button>
-              )}
-            </div>
-            <p className="text-xs text-slate-400 mt-1.5">Separa códigos con comas (búsqueda estricta "Y").</p>
-          </div>
-
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
-              <FileText size={16} className="text-emerald-500" />
-              Objeto del Contrato
-            </label>
-            <div className="relative">
-              <input 
-                type="text" 
-                value={searchObject}
-                onChange={(e) => setSearchObject(e.target.value)}
-                placeholder="Buscar descripción..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
-              />
-              <Search className="absolute left-3 top-3 text-slate-400" size={18} />
-              {searchObject && (
-                <button onClick={() => setSearchObject("")} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600">
-                  <X size={16} />
-                </button>
-              )}
-            </div>
-            <p className="text-xs text-slate-400 mt-1.5">Filtra por palabras clave en el objeto.</p>
-          </div>
-        </div>
-
-        {/* DASHBOARD DE RESUMEN (Nuevo) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          
-          {/* Tarjeta 1: Cantidad */}
-          <div className="bg-gradient-to-br from-blue-50 to-white p-5 rounded-xl shadow-sm border border-blue-100 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-1">Experiencias Encontradas</p>
-              <h3 className="text-3xl font-extrabold text-slate-800">{totals.count}</h3>
-            </div>
-            <div className="bg-blue-100 p-3 rounded-full text-blue-600">
-              <Database size={24} />
-            </div>
-          </div>
-
-          {/* Tarjeta 2: Suma SMMLV */}
-          <div className="bg-gradient-to-br from-emerald-50 to-white p-5 rounded-xl shadow-sm border border-emerald-100 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Total SMMLV</p>
-              <h3 className="text-2xl font-extrabold text-slate-800">{formatDecimal(totals.smmlv)}</h3>
-            </div>
-            <div className="bg-emerald-100 p-3 rounded-full text-emerald-600">
-              <TrendingUp size={24} />
-            </div>
-          </div>
-
-          {/* Tarjeta 3: Suma COP */}
-          <div className="bg-gradient-to-br from-indigo-50 to-white p-5 rounded-xl shadow-sm border border-indigo-100 flex items-center justify-between">
-            <div className="overflow-hidden">
-              <p className="text-xs font-bold text-indigo-500 uppercase tracking-wider mb-1">Presupuesto Total (COP)</p>
-              <h3 className="text-xl font-extrabold text-slate-800 truncate" title={formatMoney(totals.cop)}>
-                {formatMoney(totals.cop)}
-              </h3>
-            </div>
-            <div className="bg-indigo-100 p-3 rounded-full text-indigo-600 shrink-0 ml-2">
-              <DollarSign size={24} />
-            </div>
-          </div>
-        </div>
-
-        {/* Lista de Resultados */}
-        <div className="space-y-4 pt-2">
-          <div className="flex items-center justify-between px-1">
-             <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Detalle de Contratos</h2>
-             <span className="flex items-center gap-1 text-xs text-indigo-600 font-medium bg-indigo-50 px-2 py-1 rounded">
-               <ArrowDownWideNarrow size={14} /> Ordenado por SMMLV
-             </span>
-          </div>
-
-          {filteredData.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-xl border border-slate-200 border-dashed">
-              <div className="mx-auto w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                <Search className="text-slate-400" size={24} />
-              </div>
-              <h3 className="text-slate-900 font-medium">Sin resultados</h3>
-              <p className="text-slate-500 text-sm mt-1">Intenta ajustar tus filtros de búsqueda.</p>
-            </div>
-          ) : (
-            <div className="grid gap-4">
-              {filteredData.map((item, idx) => (
-                <ResultCard key={idx} item={item} searchCodes={searchCodes} />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Componente para tarjeta individual
-const ResultCard = ({ item, searchCodes }) => {
-  const highlightCodes = (allCodesString) => {
-    if (!allCodesString) return <span className="text-slate-400 italic text-sm">Sin códigos</span>;
-    const codes = allCodesString.split(',').map(c => c.trim());
-    const searchTerms = searchCodes.split(',').map(c => c.trim()).filter(c => c);
-
-    return (
-      <div className="flex flex-wrap gap-1 mt-2">
-        {codes.map((code, i) => {
-          const isMatch = searchTerms.includes(code);
-          return (
-            <span 
-              key={i} 
-              className={`text-xs px-2 py-0.5 rounded-full border ${
-                isMatch 
-                  ? 'bg-indigo-100 text-indigo-700 border-indigo-200 font-bold' 
-                  : 'bg-slate-50 text-slate-500 border-slate-200'
-              }`}
-            >
-              {code}
-            </span>
-          );
-        })}
-      </div>
-    );
-  };
-
-  return (
-    <div className="bg-white rounded-lg p-5 shadow-sm border border-slate-200 hover:shadow-md transition-shadow relative overflow-hidden">
-      <div className="flex flex-col gap-3 relative z-10">
-        
-        {/* Fila Superior: Identificadores y Contratante */}
-        <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-             <span className="bg-slate-100 text-slate-600 text-xs px-2 py-1 rounded font-mono font-medium" title="ID Interno">
-              ID: {item.id}
-            </span>
-            <span className="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded font-mono font-bold border border-blue-100" title="Consecutivo">
-              #{item.consecutivo}
-            </span>
-          </div>
-          <h3 className="text-sm font-bold text-blue-800 uppercase tracking-tight flex-1">
-            {item.contratante}
-          </h3>
-        </div>
-
-        {/* Cuerpo: Objeto */}
-        <div>
-          <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1 block">
-            Objeto del Contrato
-          </span>
-          <p className="text-slate-800 font-medium leading-relaxed text-sm">
-            {item.objeto}
-          </p>
-        </div>
-        
-        {/* Grilla de Valores */}
-        <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
-          <div>
-            <span className="text-[10px] text-slate-500 uppercase block mb-0.5">Valor (2024 COP)</span>
-            <span className="font-semibold text-slate-600 text-sm">{item.valor}</span>
-          </div>
-          <div className="border-l border-slate-200 pl-4">
-             <span className="text-[10px] text-emerald-600 font-bold uppercase block mb-0.5">Valor (SMMLV)</span>
-             <span className="font-bold text-emerald-700 text-lg">{item.smmlv}</span>
-          </div>
-        </div>
-
-        {/* Footer: Códigos */}
-        <div>
-           <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
-            Códigos UNSPSC
-          </span>
-          {highlightCodes(item.codigos)}
-        </div>
-      </div>
-    </div>
-  );
-};
-  </script>
-  // --- FIN DE TU CÓDIGO ---
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>
-
-export default App;
-
+        """, unsafe_allow_html=True)
