@@ -10,7 +10,7 @@ page_icon="📂",
 layout="wide"
 )
 
---- ESTILOS CSS PERSONALIZADOS ---
+--- ESTILOS CSS ---
 
 st.markdown("""
 
@@ -19,7 +19,7 @@ st.markdown("""
 background-color: #ffffff;
 padding: 20px;
 border-radius: 10px;
-box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
 margin-bottom: 20px;
 border: 1px solid #e2e8f0;
 }
@@ -31,13 +31,16 @@ margin-bottom: 12px;
 border-bottom: 1px solid #f1f5f9;
 padding-bottom: 12px;
 }
+.badge-container {
+display: flex;
+gap: 8px;
+}
 .badge-id {
 background-color: #f1f5f9;
 color: #475569;
 padding: 4px 8px;
 border-radius: 4px;
-font-size: 0.75em;
-font-family: monospace;
+font-size: 0.8em;
 font-weight: bold;
 }
 .badge-consecutivo {
@@ -46,10 +49,8 @@ color: #1d4ed8;
 border: 1px solid #dbeafe;
 padding: 4px 8px;
 border-radius: 4px;
-font-size: 0.75em;
-font-family: monospace;
+font-size: 0.8em;
 font-weight: bold;
-margin-left: 8px;
 }
 .contratante {
 font-weight: bold;
@@ -58,17 +59,16 @@ text-transform: uppercase;
 font-size: 0.9em;
 }
 .label-mini {
-font-size: 0.65em;
+font-size: 0.7em;
 color: #94a3b8;
 text-transform: uppercase;
 font-weight: bold;
-letter-spacing: 0.05em;
 display: block;
-margin-bottom: 2px;
+margin-bottom: 4px;
 }
 .objeto-text {
 color: #1e293b;
-font-size: 0.9em;
+font-size: 0.95em;
 margin-bottom: 16px;
 line-height: 1.5;
 }
@@ -82,25 +82,31 @@ border-radius: 8px;
 border: 1px solid #f1f5f9;
 margin-bottom: 16px;
 }
+.value-item {
+display: flex;
+flex-direction: column;
+}
 .value-cop {
 color: #475569;
 font-weight: 600;
 font-size: 0.9em;
 }
 .value-smmlv {
-color: #047857;
+color: #059669;
 font-weight: bold;
 font-size: 1.1em;
 }
+.tag-container {
+display: flex;
+flex-wrap: wrap;
+gap: 4px;
+}
 .tag {
-display: inline-block;
-background-color: #f8fafc;
+background-color: #f1f5f9;
 color: #64748b;
 padding: 2px 8px;
 border-radius: 12px;
 font-size: 0.75em;
-margin-right: 4px;
-margin-bottom: 4px;
 border: 1px solid #e2e8f0;
 }
 .tag.highlight {
@@ -129,8 +135,10 @@ df = pd.read_csv(io.StringIO(SAMPLE_CSV), sep=';')
 else:
 df = pd.read_csv(file, sep=';', encoding='latin-1')
 
+    # Limpieza de columnas
     df.columns = [c.strip() for c in df.columns]
     
+    # Mapeo de columnas flexible
     col_map = {}
     for col in df.columns:
         lower_col = col.lower()
@@ -142,6 +150,7 @@ df = pd.read_csv(file, sep=';', encoding='latin-1')
         elif 'consecutivo' in lower_col: col_map['consecutivo'] = col
         elif 'id' in lower_col: col_map['id'] = col
 
+    # Limpieza SMMLV
     def clean_smmlv(val):
         if pd.isna(val): return 0.0
         val_str = str(val).replace('.', '').replace(',', '.') 
@@ -153,6 +162,7 @@ df = pd.read_csv(file, sep=';', encoding='latin-1')
     else:
         df['smmlv_num'] = 0.0
 
+    # Limpieza COP
     def clean_cop(val):
         if pd.isna(val): return 0
         val_str = str(val).replace('.', '').strip()
@@ -201,12 +211,16 @@ with c2:
 search_object = st.text_input("Objeto del Contrato", placeholder="Buscar...")
 st.caption("Busca texto dentro de la descripción.")
 
---- LÓGICA ---
+--- LÓGICA DE FILTRADO ---
 
 filtered_df = df.copy()
 
+Filtro Objeto
+
 if search_object and 'objeto' in col_map:
 filtered_df = filtered_df[filtered_df[col_map['objeto']].astype(str).str.contains(search_object, case=False, na=False)]
+
+Filtro Códigos
 
 input_codes_list = []
 if search_codes and 'codigos' in col_map:
@@ -217,6 +231,8 @@ if pd.isna(row_codes): return False
 row_codes_str = str(row_codes)
 return all(code in row_codes_str for code in input_codes_list)
 filtered_df = filtered_df[filtered_df[col_map['codigos']].apply(check_codes)]
+
+Ordenamiento
 
 filtered_df = filtered_df.sort_values(by='smmlv_num', ascending=False)
 
@@ -241,6 +257,7 @@ if filtered_df.empty:
 st.info("No se encontraron resultados.")
 else:
 for index, row in filtered_df.iterrows():
+# Extracción de datos
 r_id = row[col_map.get('id', '')] if 'id' in col_map else index
 r_consecutivo = row[col_map.get('consecutivo', '')] if 'consecutivo' in col_map else '-'
 r_contratante = row[col_map.get('contratante', '')] if 'contratante' in col_map else 'Desconocido'
@@ -249,6 +266,7 @@ r_valor_raw = row[col_map.get('valor', '')] if 'valor' in col_map else '0'
 r_smmlv_raw = row[col_map.get('smmlv', '')] if 'smmlv' in col_map else '0'
 r_codigos = str(row[col_map.get('codigos', '')]) if 'codigos' in col_map else ''
 
+    # Generar HTML de códigos
     codes_html = ""
     if r_codigos and r_codigos.lower() != 'nan':
         code_list = [c.strip() for c in r_codigos.split(',')]
@@ -259,21 +277,38 @@ r_codigos = str(row[col_map.get('codigos', '')]) if 'codigos' in col_map else ''
     else:
         codes_html = '<span class="tag">Sin códigos</span>'
 
-    # TARJETA HTML: SIN SANGRÍA PARA EVITAR ERROR
+    # Construcción de la tarjeta HTML
+    # IMPORTANTE: Todo el string HTML está pegado a la izquierda sin indentación
+    # para evitar que Streamlit lo procese como bloque de código Markdown.
     card_html = f"""
 
 
 <div class="card">
 <div class="card-header">
-<div><span class="badge-id">ID: {r_id}</span><span class="badge-consecutivo">#{r_consecutivo}</span></div>
+<div class="badge-container">
+<span class="badge-id">ID: {r_id}</span>
+<span class="badge-consecutivo">#{r_consecutivo}</span>
+</div>
 <div class="contratante">{r_contratante}</div>
 </div>
-<div><span class="label-mini">Objeto del Contrato</span><div class="objeto-text">{r_objeto}</div></div>
-<div class="value-grid">
-<div style="border-right: 1px solid #e2e8f0;"><span class="label-mini">Valor (2024 COP)</span><div class="value-cop">{r_valor_raw}</div></div>
-<div style="padding-left: 10px;"><span class="label-mini" style="color: #059669;">Valor (SMMLV)</span><div class="value-smmlv">{r_smmlv_raw}</div></div>
+<div>
+<span class="label-mini">Objeto del Contrato</span>
+<div class="objeto-text">{r_objeto}</div>
 </div>
-<div><span class="label-mini">Códigos UNSPSC</span><div>{codes_html}</div></div>
+<div class="value-grid">
+<div class="value-item" style="border-right: 1px solid #e2e8f0;">
+<span class="label-mini">Valor (2024 COP)</span>
+<div class="value-cop">{r_valor_raw}</div>
+</div>
+<div class="value-item" style="padding-left: 10px;">
+<span class="label-mini" style="color: #059669;">Valor (SMMLV)</span>
+<div class="value-smmlv">{r_smmlv_raw}</div>
+</div>
+</div>
+<div>
+<span class="label-mini">Códigos UNSPSC</span>
+<div class="tag-container">{codes_html}</div>
+</div>
 </div>
 """
 st.markdown(card_html, unsafe_allow_html=True)
