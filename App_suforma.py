@@ -2,313 +2,274 @@ import streamlit as st
 import pandas as pd
 import io
 
---- CONFIGURACIÓN DE LA PÁGINA ---
-
+# Configuración de la página
 st.set_page_config(
-page_title="Buscador de Experiencias",
-page_icon="📂",
-layout="wide"
+    page_title="Buscador de Experiencias SuForma",
+    page_icon="🔍",
+    layout="wide"
 )
 
---- ESTILOS CSS ---
-
+# CSS Personalizado para ocultar elementos default y mejorar estética
 st.markdown("""
-
 <style>
-.card {
-background-color: #ffffff;
-padding: 20px;
-border-radius: 10px;
-box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-margin-bottom: 20px;
-border: 1px solid #e2e8f0;
-}
-.card-header {
-display: flex;
-justify-content: space-between;
-align-items: center;
-margin-bottom: 12px;
-border-bottom: 1px solid #f1f5f9;
-padding-bottom: 12px;
-}
-.badge-container {
-display: flex;
-gap: 8px;
-}
-.badge-id {
-background-color: #f1f5f9;
-color: #475569;
-padding: 4px 8px;
-border-radius: 4px;
-font-size: 0.8em;
-font-weight: bold;
-}
-.badge-consecutivo {
-background-color: #eff6ff;
-color: #1d4ed8;
-border: 1px solid #dbeafe;
-padding: 4px 8px;
-border-radius: 4px;
-font-size: 0.8em;
-font-weight: bold;
-}
-.contratante {
-font-weight: bold;
-color: #1e40af;
-text-transform: uppercase;
-font-size: 0.9em;
-}
-.label-mini {
-font-size: 0.7em;
-color: #94a3b8;
-text-transform: uppercase;
-font-weight: bold;
-display: block;
-margin-bottom: 4px;
-}
-.objeto-text {
-color: #1e293b;
-font-size: 0.95em;
-margin-bottom: 16px;
-line-height: 1.5;
-}
-.value-grid {
-display: grid;
-grid-template-columns: 1fr 1fr;
-gap: 16px;
-background-color: #f8fafc;
-padding: 12px;
-border-radius: 8px;
-border: 1px solid #f1f5f9;
-margin-bottom: 16px;
-}
-.value-item {
-display: flex;
-flex-direction: column;
-}
-.value-cop {
-color: #475569;
-font-weight: 600;
-font-size: 0.9em;
-}
-.value-smmlv {
-color: #059669;
-font-weight: bold;
-font-size: 1.1em;
-}
-.tag-container {
-display: flex;
-flex-wrap: wrap;
-gap: 4px;
-}
-.tag {
-background-color: #f1f5f9;
-color: #64748b;
-padding: 2px 8px;
-border-radius: 12px;
-font-size: 0.75em;
-border: 1px solid #e2e8f0;
-}
-.tag.highlight {
-background-color: #e0e7ff;
-color: #4338ca;
-border-color: #c7d2fe;
-font-weight: bold;
-}
+    .main {
+        background-color: #f8f9fa;
+    }
+    div[data-testid="stMetricValue"] {
+        font-size: 1.6rem;
+        color: #0f54c9;
+    }
+    .stTextInput > label {
+        font-weight: bold;
+        color: #333;
+    }
 </style>
-
 """, unsafe_allow_html=True)
 
---- DATOS DE MUESTRA ---
+# -----------------------------------------------------------------------------
+# DATOS DE PRUEBA (Dummy Data)
+# -----------------------------------------------------------------------------
+SAMPLE_CSV = """ID_Experiencia;Consecutivo;Celebrado_Por;Contratista;Contratante;Objeto;Valor_SMMLV;Valor COP;Porcentaje_Participacion;Codigos_UNSPSC
+1;001;EL PROPONENTE;SUFORMA;ALCALDIA EJEMPLO;SUMINISTRO DE PAPELERIA E IMPRESOS;111,31;144.703.000;1;11101500, 14111500
+2;002;CONSORCIO;SUFORMA;GOBERNACION DEL VALLE;DOTACION DE MOBILIARIO ESCOLAR;50,5;65.000.000;0.5;56121000, 56101700
+3;003;UNION TEMPORAL;SUFORMA;HOSPITAL SAN JORGE;MANTENIMIENTO DE EQUIPOS DE COMPUTO;200,00;260.000.000;1;81111800, 81112300
+4;004;EL PROPONENTE;SUFORMA;ALCALDIA DE PEREIRA;SUMINISTRO DE ELEMENTOS DE ASEO Y CAFETERIA;10,00;13.000.000;1;47131800, 14111700
+5;005;EL PROPONENTE;SUFORMA;SENA REGIONAL;ADQUISICION DE MATERIAL DE FORMACION;80,20;104.260.000;1;14111500, 44121700"""
 
-SAMPLE_CSV = """ID_Experiencia;Consecutivo;Celebrado_Por;Contratista;Contratante;Objeto;Valor_SMMLV; Valor del contrato a COP en 2024 ;Porcentaje_Participacion;Codigos_UNSPSC
-1;1;1 - EL PROPONENTE;SUFORMA S.A.S.;ALCALDIA MUNICIPAL DE CHIA;IMPRESOS;111,31; 144.703.000 ;1;11101500, 11101600, 11101700, 11101800, 11101900, 11111600, 14111500, 14111600, 14111700, 14111800, 14121500, 14121900, 24111500, 24112500, 31101700, 31121900, 31401700, 45101700, 55101500, 55111500, 55121700, 60141000, 60141100, 73151900, 82101500, 82101600, 82101700
-"""
+# -----------------------------------------------------------------------------
+# FUNCIONES DE LIMPIEZA Y CARGA
+# -----------------------------------------------------------------------------
 
---- FUNCIONES ---
+def clean_currency_cop(val):
+    """
+    Convierte string formato '144.703.000' a int 144703000
+    Elimina puntos.
+    """
+    if pd.isna(val): return 0
+    val_str = str(val).replace('.', '').strip()
+    try:
+        return int(val_str)
+    except ValueError:
+        return 0
 
-@st.cache_data
-def load_data(file):
-try:
-if file is None:
-df = pd.read_csv(io.StringIO(SAMPLE_CSV), sep=';')
-else:
-df = pd.read_csv(file, sep=';', encoding='latin-1')
+def clean_smmlv(val):
+    """
+    Convierte string formato '1.000,00' o '111,31' a float.
+    Elimina puntos de miles y reemplaza coma decimal por punto.
+    """
+    if pd.isna(val): return 0.0
+    # Eliminar puntos de miles (ej: 1.000,50 -> 1000,50)
+    val_str = str(val).replace('.', '')
+    # Reemplazar coma decimal por punto (ej: 1000,50 -> 1000.50)
+    val_str = val_str.replace(',', '.')
+    try:
+        return float(val_str)
+    except ValueError:
+        return 0.0
 
-    # Limpieza de columnas
-    df.columns = [c.strip() for c in df.columns]
+def identify_columns(df):
+    """
+    Identifica dinámicamente las columnas clave basándose en palabras clave.
+    Retorna un diccionario con el mapeo.
+    """
+    cols = df.columns
+    cols_lower = [c.lower() for c in cols]
     
-    # Mapeo de columnas flexible
-    col_map = {}
-    for col in df.columns:
-        lower_col = col.lower()
-        if 'objeto' in lower_col: col_map['objeto'] = col
-        elif 'codigos' in lower_col or 'unspsc' in lower_col: col_map['codigos'] = col
-        elif 'contratante' in lower_col: col_map['contratante'] = col
-        elif 'valor' in lower_col and 'cop' in lower_col: col_map['valor'] = col
-        elif 'smmlv' in lower_col: col_map['smmlv'] = col
-        elif 'consecutivo' in lower_col: col_map['consecutivo'] = col
-        elif 'id' in lower_col: col_map['id'] = col
+    mapping = {
+        'id': None,
+        'consecutivo': None,
+        'contratante': None,
+        'objeto': None,
+        'valor_cop': None,
+        'valor_smmlv': None,
+        'unspsc': None
+    }
 
-    # Limpieza SMMLV
-    def clean_smmlv(val):
-        if pd.isna(val): return 0.0
-        val_str = str(val).replace('.', '').replace(',', '.') 
-        try: return float(val_str)
-        except: return 0.0
+    for actual_col, lower_col in zip(cols, cols_lower):
+        if 'id' in lower_col and mapping['id'] is None: mapping['id'] = actual_col
+        elif 'consecutivo' in lower_col: mapping['consecutivo'] = actual_col
+        elif 'contratante' in lower_col: mapping['contratante'] = actual_col
+        elif 'objeto' in lower_col: mapping['objeto'] = actual_col
+        elif ('valor' in lower_col or 'presupuesto' in lower_col) and 'cop' in lower_col: mapping['valor_cop'] = actual_col
+        elif 'smmlv' in lower_col: mapping['valor_smmlv'] = actual_col
+        elif 'unspsc' in lower_col or 'codigos' in lower_col: mapping['unspsc'] = actual_col
 
-    if 'smmlv' in col_map:
-        df['smmlv_num'] = df[col_map['smmlv']].apply(clean_smmlv)
-    else:
-        df['smmlv_num'] = 0.0
+    return mapping
 
-    # Limpieza COP
-    def clean_cop(val):
-        if pd.isna(val): return 0
-        val_str = str(val).replace('.', '').strip()
-        try: return int(val_str)
-        except: return 0
+def load_data(uploaded_file):
+    """Carga y limpia los datos desde el archivo subido o el ejemplo."""
+    try:
+        if uploaded_file is not None:
+            # Intentamos detectar separador, pero por defecto el prompt pide coma.
+            # Sin embargo, el ejemplo del prompt usa punto y coma. 
+            # Usaremos engine='python' y sep=None para autodetectar si es posible,
+            # o fallback a los comunes.
+            try:
+                df = pd.read_csv(uploaded_file, sep=',', engine='python')
+                if len(df.columns) < 2: # Si falló la coma
+                    uploaded_file.seek(0)
+                    df = pd.read_csv(uploaded_file, sep=';', engine='python')
+            except:
+                uploaded_file.seek(0)
+                df = pd.read_csv(uploaded_file, sep=';', engine='python')
+        else:
+            df = pd.read_csv(io.StringIO(SAMPLE_CSV), sep=';')
+
+        # Mapeo de columnas
+        col_map = identify_columns(df)
         
-    if 'valor' in col_map:
-        df['cop_num'] = df[col_map['valor']].apply(clean_cop)
-    else:
-        df['cop_num'] = 0
+        # Validar que existan las columnas críticas
+        missing = [k for k, v in col_map.items() if v is None]
+        if missing:
+            st.error(f"No se pudieron identificar las siguientes columnas en el archivo: {', '.join(missing)}")
+            return None, None
 
-    st.session_state['col_map'] = col_map
-    return df
+        # Limpieza de datos
+        df['clean_smmlv'] = df[col_map['valor_smmlv']].apply(clean_smmlv)
+        df['clean_cop'] = df[col_map['valor_cop']].apply(clean_currency_cop)
+        
+        # Asegurar que UNSPSC sea string para búsquedas
+        df[col_map['unspsc']] = df[col_map['unspsc']].astype(str)
 
-except Exception as e:
-    st.error(f"Error al procesar el archivo: {e}")
-    return pd.DataFrame()
+        return df, col_map
 
+    except Exception as e:
+        st.error(f"Error al cargar el archivo: {e}")
+        return None, None
 
---- INTERFAZ ---
+# -----------------------------------------------------------------------------
+# INTERFAZ PRINCIPAL
+# -----------------------------------------------------------------------------
 
-st.title("📂 Buscador de Experiencias")
+st.title("💼 Buscador de Experiencias SuForma")
+st.markdown("Carga tu base de datos de contratación y encuentra experiencias por códigos UNSPSC o descripción.")
 
+# Sidebar de Carga
 with st.sidebar:
-st.header("Configuración")
-uploaded_file = st.file_uploader("Cargar CSV (Delimitado por ;)", type=['csv'])
-if st.button("Borrar Caché y Recargar"):
-st.cache_data.clear()
-st.rerun()
+    st.header("📂 Cargar Datos")
+    uploaded_file = st.file_uploader("Subir archivo CSV", type=['csv'])
+    
+    st.info("💡 Si no subes archivo, se usarán datos de prueba.")
+    st.markdown("---")
+    st.markdown("**Instrucciones:**")
+    st.markdown("1. El archivo debe ser CSV.")
+    st.markdown("2. Formato moneda: 1.000,00 (Europa/Latam).")
 
-df = load_data(uploaded_file)
-col_map = st.session_state.get('col_map', {})
+# Cargar DataFrame
+df, col_map = load_data(uploaded_file)
 
-if df.empty:
-st.warning("No hay datos para mostrar.")
-st.stop()
+if df is not None:
+    # -------------------------------------------------------------------------
+    # FILTROS
+    # -------------------------------------------------------------------------
+    st.subheader("🔍 Filtros de Búsqueda")
+    
+    c1, c2 = st.columns([1, 2])
+    
+    with c1:
+        search_unspsc = st.text_input("Códigos UNSPSC (separados por coma)", placeholder="Ej: 14111500, 11101500")
+    
+    with c2:
+        search_object = st.text_input("Palabra clave en Objeto", placeholder="Ej: Papelería, Mantenimiento...")
 
---- FILTROS ---
+    # Lógica de Filtrado
+    filtered_df = df.copy()
 
-st.subheader("Filtros de Búsqueda")
-c1, c2 = st.columns(2)
-with c1:
-search_codes = st.text_input("Códigos UNSPSC", placeholder="Ej: 11121600, 14111500")
-st.caption("Muestra experiencias que contengan TODOS los códigos.")
-with c2:
-search_object = st.text_input("Objeto del Contrato", placeholder="Buscar...")
-st.caption("Busca texto dentro de la descripción.")
+    # 1. Filtro por Objeto
+    if search_object:
+        filtered_df = filtered_df[filtered_df[col_map['objeto']].astype(str).str.contains(search_object, case=False, na=False)]
 
---- LÓGICA DE FILTRADO ---
+    # 2. Filtro por UNSPSC (Lógica ESTRICTA AND)
+    if search_unspsc:
+        # Convertir input a lista de códigos limpios
+        input_codes = [code.strip() for code in search_unspsc.split(',') if code.strip()]
+        
+        def has_all_codes(row_codes_str, target_codes):
+            if pd.isna(row_codes_str): return False
+            # Asumimos que la celda tiene codigos separados por coma u otro
+            # Normalizamos la celda
+            row_clean = str(row_codes_str).replace(';', ',') 
+            row_code_list = [c.strip() for c in row_clean.split(',')]
+            
+            # Verificar que TODOS los target_codes estén en row_code_list
+            return all(target in row_code_list for target in target_codes)
 
-filtered_df = df.copy()
+        if input_codes:
+            filtered_df = filtered_df[filtered_df[col_map['unspsc']].apply(lambda x: has_all_codes(x, input_codes))]
 
-Filtro Objeto
+    # Ordenamiento (Mayor a Menor SMMLV)
+    filtered_df = filtered_df.sort_values(by='clean_smmlv', ascending=False)
 
-if search_object and 'objeto' in col_map:
-filtered_df = filtered_df[filtered_df[col_map['objeto']].astype(str).str.contains(search_object, case=False, na=False)]
+    # -------------------------------------------------------------------------
+    # DASHBOARD DE MÉTRICAS
+    # -------------------------------------------------------------------------
+    st.markdown("---")
+    m1, m2, m3 = st.columns(3)
+    
+    total_count = len(filtered_df)
+    total_smmlv = filtered_df['clean_smmlv'].sum()
+    total_cop = filtered_df['clean_cop'].sum()
 
-Filtro Códigos
+    m1.metric("Experiencias Encontradas", f"{total_count}")
+    m2.metric("Valor Total SMMLV", f"{total_smmlv:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+    m3.metric("Presupuesto Total (COP)", f"$ {total_cop:,.0f}".replace(",", "."))
+    
+    st.markdown("---")
 
-input_codes_list = []
-if search_codes and 'codigos' in col_map:
-input_codes_list = [c.strip() for c in search_codes.split(',') if c.strip()]
-if input_codes_list:
-def check_codes(row_codes):
-if pd.isna(row_codes): return False
-row_codes_str = str(row_codes)
-return all(code in row_codes_str for code in input_codes_list)
-filtered_df = filtered_df[filtered_df[col_map['codigos']].apply(check_codes)]
-
-Ordenamiento
-
-filtered_df = filtered_df.sort_values(by='smmlv_num', ascending=False)
-
---- DASHBOARD ---
-
-st.divider()
-total_count = len(filtered_df)
-total_smmlv = filtered_df['smmlv_num'].sum()
-total_cop = filtered_df['cop_num'].sum()
-
-m1, m2, m3 = st.columns(3)
-m1.metric("Experiencias Encontradas", total_count)
-m2.metric("Total SMMLV", f"{total_smmlv:,.2f}")
-m3.metric("Presupuesto Total (COP)", f"${total_cop:,.0f}".replace(",", "."))
-st.divider()
-
---- RESULTADOS ---
-
-st.subheader(f"Resultados ({total_count})")
-
-if filtered_df.empty:
-st.info("No se encontraron resultados.")
-else:
-for index, row in filtered_df.iterrows():
-# Extracción de datos
-r_id = row[col_map.get('id', '')] if 'id' in col_map else index
-r_consecutivo = row[col_map.get('consecutivo', '')] if 'consecutivo' in col_map else '-'
-r_contratante = row[col_map.get('contratante', '')] if 'contratante' in col_map else 'Desconocido'
-r_objeto = row[col_map.get('objeto', '')] if 'objeto' in col_map else ''
-r_valor_raw = row[col_map.get('valor', '')] if 'valor' in col_map else '0'
-r_smmlv_raw = row[col_map.get('smmlv', '')] if 'smmlv' in col_map else '0'
-r_codigos = str(row[col_map.get('codigos', '')]) if 'codigos' in col_map else ''
-
-    # Generar HTML de códigos
-    codes_html = ""
-    if r_codigos and r_codigos.lower() != 'nan':
-        code_list = [c.strip() for c in r_codigos.split(',')]
-        for code in code_list:
-            is_match = code in input_codes_list
-            css_class = "tag highlight" if is_match else "tag"
-            codes_html += f'<span class="{css_class}">{code}</span>'
+    # -------------------------------------------------------------------------
+    # RESULTADOS (TARJETAS HTML)
+    # -------------------------------------------------------------------------
+    
+    if total_count == 0:
+        st.warning("No se encontraron resultados con los filtros aplicados.")
     else:
-        codes_html = '<span class="tag">Sin códigos</span>'
+        for index, row in filtered_df.iterrows():
+            # Extracción de datos seguros
+            r_id = row[col_map['id']]
+            r_consecutivo = row[col_map['consecutivo']]
+            r_contratante = row[col_map['contratante']]
+            r_objeto = row[col_map['objeto']]
+            r_unspsc_str = row[col_map['unspsc']]
+            
+            # Formateo de números para visualización
+            val_cop_fmt = f"$ {row['clean_cop']:,.0f}".replace(",", ".")
+            val_smmlv_fmt = f"{row['clean_smmlv']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-    # Construcción de la tarjeta HTML
-    # IMPORTANTE: Todo el string HTML está pegado a la izquierda sin indentación
-    # para evitar que Streamlit lo procese como bloque de código Markdown.
-    card_html = f"""
+            # Generación de badges para UNSPSC
+            codes_list = [c.strip() for c in str(r_unspsc_str).replace(';', ',').split(',')]
+            tags_html = ""
+            for code in codes_list:
+                if code: # evitar vacíos
+                    tags_html += f"<span style='background-color: #e2e8f0; color: #475569; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-right: 4px; display: inline-block; margin-bottom: 2px;'>{code}</span>"
 
-
-<div class="card">
-<div class="card-header">
-<div class="badge-container">
-<span class="badge-id">ID: {r_id}</span>
-<span class="badge-consecutivo">#{r_consecutivo}</span>
+            # Renderizado HTML de la Tarjeta
+            # NOTA: HTML pegado a la izquierda para evitar problemas de indentación
+            card_html = f"""
+<div style="background-color: white; border: 1px solid #e0e0e0; border-radius: 10px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+<div style="display: flex; justify-content: space-between; margin-bottom: 10px; color: #888; font-size: 0.85rem;">
+<span>ID: {r_id}</span>
+<span>Consecutivo: {r_consecutivo}</span>
 </div>
-<div class="contratante">{r_contratante}</div>
+<div style="font-size: 1.1rem; font-weight: bold; color: #1e293b; margin-bottom: 5px;">
+{r_contratante}
+</div>
+<div style="font-size: 0.95rem; color: #475569; margin-bottom: 15px; line-height: 1.5;">
+{r_objeto}
+</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background-color: #f8fafc; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+<div>
+<div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Valor COP</div>
+<div style="font-size: 1rem; font-weight: 600; color: #334155;">{val_cop_fmt}</div>
 </div>
 <div>
-<span class="label-mini">Objeto del Contrato</span>
-<div class="objeto-text">{r_objeto}</div>
-</div>
-<div class="value-grid">
-<div class="value-item" style="border-right: 1px solid #e2e8f0;">
-<span class="label-mini">Valor (2024 COP)</span>
-<div class="value-cop">{r_valor_raw}</div>
-</div>
-<div class="value-item" style="padding-left: 10px;">
-<span class="label-mini" style="color: #059669;">Valor (SMMLV)</span>
-<div class="value-smmlv">{r_smmlv_raw}</div>
+<div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Valor SMMLV</div>
+<div style="font-size: 1rem; font-weight: bold; color: #16a34a;">{val_smmlv_fmt}</div>
 </div>
 </div>
 <div>
-<span class="label-mini">Códigos UNSPSC</span>
-<div class="tag-container">{codes_html}</div>
+<div style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 5px;">Códigos UNSPSC:</div>
+<div>{tags_html}</div>
 </div>
 </div>
 """
-st.markdown(card_html, unsafe_allow_html=True)
+            st.markdown(card_html, unsafe_allow_html=True)
