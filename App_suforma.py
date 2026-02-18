@@ -100,18 +100,30 @@ def load_data(uploaded_file):
     """Carga y limpia los datos desde el archivo subido o el ejemplo."""
     try:
         if uploaded_file is not None:
-            # Intentamos detectar separador, pero por defecto el prompt pide coma.
-            # Sin embargo, el ejemplo del prompt usa punto y coma. 
-            # Usaremos engine='python' y sep=None para autodetectar si es posible,
-            # o fallback a los comunes.
-            try:
-                df = pd.read_csv(uploaded_file, sep=',', engine='python')
-                if len(df.columns) < 2: # Si falló la coma
+            # Intentamos leer con varias codificaciones para soportar archivos de Excel (Latin-1)
+            encodings_to_try = ['utf-8', 'latin-1', 'cp1252']
+            df = None
+            
+            for encoding in encodings_to_try:
+                try:
                     uploaded_file.seek(0)
-                    df = pd.read_csv(uploaded_file, sep=';', engine='python')
-            except:
-                uploaded_file.seek(0)
-                df = pd.read_csv(uploaded_file, sep=';', engine='python')
+                    # Intentar primero con punto y coma (común en Latam)
+                    df = pd.read_csv(uploaded_file, sep=';', encoding=encoding)
+                    
+                    # Si se leyó pero todo quedó en una columna, intentar con coma
+                    if len(df.columns) < 2:
+                        uploaded_file.seek(0)
+                        df = pd.read_csv(uploaded_file, sep=',', encoding=encoding)
+                    
+                    # Si tiene columnas, asumimos éxito y salimos del loop
+                    if len(df.columns) >= 2:
+                        break
+                except Exception:
+                    continue # Si falla, probar siguiente codificación
+
+            if df is None:
+                st.error("No se pudo leer el archivo. Asegúrate de que sea un CSV válido.")
+                return None, None
         else:
             df = pd.read_csv(io.StringIO(SAMPLE_CSV), sep=';')
 
