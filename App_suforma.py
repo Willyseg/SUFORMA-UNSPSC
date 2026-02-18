@@ -278,37 +278,37 @@ else:
         else:
             codes_html = '<span class="tag">Sin códigos</span>'
 
-        # Renderizar tarjeta HTML
+        # Renderizar tarjeta HTML (Sin sangría para evitar que Markdown lo tome como código)
         card_html = f"""
-        <div class="card">
-            <div class="card-header">
-                <div>
-                    <span class="badge-id">ID: {r_id}</span>
-                    <span class="badge-consecutivo">#{r_consecutivo}</span>
-                </div>
-                <div class="contratante">{r_contratante}</div>
-            </div>
-            
-            <div>
-                <span class="label-mini">Objeto del Contrato</span>
-                <div class="objeto-text">{r_objeto}</div>
-            </div>
-
-            <div class="value-grid">
-                <div style="border-right: 1px solid #e2e8f0;">
-                    <span class="label-mini">Valor (2024 COP)</span>
-                    <div class="value-cop">{r_valor_raw}</div>
-                </div>
-                <div style="padding-left: 10px;">
-                    <span class="label-mini" style="color: #059669;">Valor (SMMLV)</span>
-                    <div class="value-smmlv">{r_smmlv_raw}</div>
-                </div>
-            </div>
-
-            <div>
-                <span class="label-mini">Códigos UNSPSC</span>
-                <div>{codes_html}</div>
-            </div>
+<div class="card">
+    <div class="card-header">
+        <div>
+            <span class="badge-id">ID: {r_id}</span>
+            <span class="badge-consecutivo">#{r_consecutivo}</span>
         </div>
-        """
+        <div class="contratante">{r_contratante}</div>
+    </div>
+    
+    <div>
+        <span class="label-mini">Objeto del Contrato</span>
+        <div class="objeto-text">{r_objeto}</div>
+    </div>
+
+    <div class="value-grid">
+        <div style="border-right: 1px solid #e2e8f0;">
+            <span class="label-mini">Valor (2024 COP)</span>
+            <div class="value-cop">{r_valor_raw}</div>
+        </div>
+        <div style="padding-left: 10px;">
+            <span class="label-mini" style="color: #059669;">Valor (SMMLV)</span>
+            <div class="value-smmlv">{r_smmlv_raw}</div>
+        </div>
+    </div>
+
+    <div>
+        <span class="label-mini">Códigos UNSPSC</span>
+        <div>{codes_html}</div>
+    </div>
+</div>
+"""
         st.markdown(card_html, unsafe_allow_html=True)
