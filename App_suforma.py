@@ -23,6 +23,11 @@ st.markdown("""
         font-weight: bold;
         color: #333;
     }
+    .stDownloadButton > button {
+        width: 100%;
+        background-color: #16a34a !important;
+        color: white !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -119,6 +124,14 @@ def load_data(uploaded_file):
         st.error(f"Error al cargar el archivo: {e}")
         return None, None
 
+def convert_df_to_excel(df):
+    """Convierte el DataFrame filtrado a un archivo Excel en memoria."""
+    output = io.BytesIO()
+    # Usamos el motor 'openpyxl' (asegúrate de incluirlo en requirements.txt)
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Resultados_Busqueda')
+    return output.getvalue()
+
 # -----------------------------------------------------------------------------
 # INTERFAZ PRINCIPAL
 # -----------------------------------------------------------------------------
@@ -177,6 +190,18 @@ if df is not None:
     m2.metric("Valor Total SMMLV", f"{total_smmlv:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
     m3.metric("Presupuesto Total (COP)", f"$ {total_cop:,.0f}".replace(",", "."))
     
+    # -------------------------------------------------------------------------
+    # BOTÓN DE DESCARGA
+    # -------------------------------------------------------------------------
+    if total_count > 0:
+        excel_data = convert_df_to_excel(filtered_df)
+        st.download_button(
+            label="📊 Descargar resultados en Excel",
+            data=excel_data,
+            file_name="experiencias_suforma_filtrado.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
     st.markdown("---")
 
     if total_count == 0:
